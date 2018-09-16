@@ -12,6 +12,12 @@ namespace StreamCompaction {
             return timer;
         }
         // TODO: __global__
+        __global__ void scan(float *g_odata, float *g_idata, int n) {
+            extern __shared__ float temp[];
+            int thid = threadIdx.x;
+            int pout = 0, pin = 1;
+            
+        }
 
         /**
          * Performs prefix-sum (aka scan) on idata, storing the result into odata.
