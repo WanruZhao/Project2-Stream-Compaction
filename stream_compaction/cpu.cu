@@ -87,6 +87,8 @@ namespace StreamCompaction {
             }
 
 	        timer().endCpuTimer();
+			free(tmp);
+			free(scan);
             return count;
         }
     }
