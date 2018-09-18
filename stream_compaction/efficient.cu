@@ -70,7 +70,6 @@ namespace StreamCompaction {
 
             timer().startGpuTimer();
             // TODO
-
 			scanCore(nPow, d, dev_idata);
 
             timer().endGpuTimer();

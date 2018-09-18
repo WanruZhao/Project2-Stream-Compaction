@@ -7,17 +7,23 @@
  */
 
 #include <cstdio>
+#include <vector>
 #include <stream_compaction/cpu.h>
 #include <stream_compaction/naive.h>
 #include <stream_compaction/efficient.h>
 #include <stream_compaction/thrust.h>
+#include <stream_compaction/radix.h>
 #include "testing_helpers.hpp"
+
+//#define RADIX
 
 const int SIZE = 1 << 8; // feel free to change the size of array
 const int NPOT = SIZE - 3; // Non-Power-Of-Two
 int *a = new int[SIZE];
 int *b = new int[SIZE];
 int *c = new int[SIZE];
+
+int *d = new int[SIZE];
 
 int main(int argc, char* argv[]) {
     // Scan tests
@@ -95,6 +101,28 @@ int main(int argc, char* argv[]) {
     //printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
 
+#ifdef RADIX
+    zeroArray(SIZE, d);
+    
+    std::vector<int> aVec(SIZE);
+    for(int i = 0; i < SIZE; i++) {
+        aVec[i] = a[i];
+    }
+    std::sort(aVec.begin(), aVec.end());
+    for(int i = 0; i < SIZE; i++) {
+        d[i] = aVec[i];
+    }
+    printArray(SIZE, d, true);
+
+    zeroArray(SIZE, c);
+    printDesc("radix sort, power-of-two");
+    StreamCompaction::Raidx::sort(SIZE, c, a);
+    printElapsedTime(StreamCompaction::Raidx::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
+    printArray(SIZE, c, true);
+    printCmpResult(SIZE, d, c);
+
+#endif
+
     printf("\n");
     printf("*****************************\n");
     printf("** STREAM COMPACTION TESTS **\n");
@@ -151,4 +179,5 @@ int main(int argc, char* argv[]) {
 	delete[] a;
 	delete[] b;
 	delete[] c;
+    delete[] d;
 }
