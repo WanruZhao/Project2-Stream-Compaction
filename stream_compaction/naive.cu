@@ -60,24 +60,24 @@ namespace StreamCompaction {
 		}
 		
 
-		__global__ void kernSharedNaiveScan(int n, int *odata, int *auxidata, const int *idata, int isMulti) {
+		__global__ void kernSharedNaiveScan(int n, int d, int *odata, int *auxidata, const int *idata, int isMulti) {
 			extern __shared__ int temp[];
 
 			int index = threadIdx.x;
-			int boffset = blockIdx.x * blockDim.x * 2;
+			int boffset = blockIdx.x * blockDim.x;
 
 			int pout = 1, pin = 0;
-			temp[pout * n + index + boffset] = idata[pout * n + index - 1 + boffset];
+			temp[pout * n + index + boffset * 2] = idata[pout * n + index + boffset];
 			
-			_syncthreads();
-			for(int i = 1; i < n; i *= 2) {
+			__syncthreads();
+			for(int i = 1; i < (1 << d); i *= 2) {
 				pout = 1 - pout;
 				pin = 1 - pout;
 
 				if(index >= i) {
-					temp[pout * n + index + boffset] += temp[pin * n + index + boffset - i];
+					temp[pout * n + index + boffset * 2] += temp[pin * n + index + boffset * 2 - i];
 				} else {
-					temp[pout * n + index + boffset] = temp[pin * n + index + boffset];
+					temp[pout * n + index + boffset * 2] = temp[pin * n + index + boffset * 2];
 				}
 
 				__syncthreads();
@@ -113,7 +113,6 @@ namespace StreamCompaction {
 			int blockCount = (n + blockSize - 1) / blockSize;
 			int lastBlockN = n - (blockCount - 1) * blockSize;
 			int d = ilog2ceil(blockSize);
-			int lastD = ilog2ceil(lastBlockN);
 
 			int *dev_idata, *dev_odata, *dev_auxi, *dev_tauxi;
 
@@ -132,12 +131,14 @@ namespace StreamCompaction {
 
 			int blocknum = blockSize;
 			int sharedMemory = 2 * blockSize * sizeof(int);
-			kernSharedNaiveScan<<<blockCount, blocknum, sharedMemory>>>(blocknum, dev_odata, dev_auxi, dev_idata, 1);
+			kernSharedNaiveScan<<<blockCount, blocknum, sharedMemory>>>(blocknum, d, dev_odata, dev_auxi, dev_idata, 1);
 
 			// assump blockSize <= blockSize
-			kernSharedNaiveScan<<<1, blocknum, sharedMemory>>>(blocknum, dev_tauxi, NULL, dev_auxi, 0);
+			sharedMemory = 2 * blockCount * sizeof(int);
+			d = ilog2ceil(blockCount);
+			kernSharedNaiveScan<<<1, blockCount, sharedMemory>>>(blocknum, d, dev_tauxi, NULL, dev_auxi, 0);
 
-			sharedMemory = blockSize * sizeof(int);
+			sharedMemory = blockCount * sizeof(int);
 			kernAddAuxi<<<blockCount, blocknum, sharedMemory>>> (blocknum, dev_odata, dev_tauxi);
 
 			odata[0] = 0;
@@ -147,7 +148,6 @@ namespace StreamCompaction {
 			cudaFree(dev_odata);
 			cudaFree(dev_auxi);
 
-			free(temp);
 		}
     }
 }

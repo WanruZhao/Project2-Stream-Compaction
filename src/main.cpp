@@ -15,7 +15,7 @@
 #include <stream_compaction/radix.h>
 #include "testing_helpers.hpp"
 
-//#define RADIX
+#define RADIX
 
 const int SIZE = 1 << 8; // feel free to change the size of array
 const int NPOT = SIZE - 3; // Non-Power-Of-Two
@@ -24,6 +24,8 @@ int *b = new int[SIZE];
 int *c = new int[SIZE];
 
 int *d = new int[SIZE];
+int *e = new int[NPOT];
+int *f = new int[SIZE];
 
 int main(int argc, char* argv[]) {
     // Scan tests
@@ -73,6 +75,20 @@ int main(int argc, char* argv[]) {
     //printArray(SIZE, c, true);
     printCmpResult(NPOT, b, c);
 
+	//zeroArray(SIZE, c);
+	//printDesc("naive scan, power-of-two, shared memory");
+	//StreamCompaction::Naive::shared_scan(SIZE, c, a);
+	//printElapsedTime(StreamCompaction::Naive::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
+	//printArray(SIZE, c, true);
+	//printCmpResult(SIZE, b, c);
+
+	//zeroArray(SIZE, c);
+	//printDesc("naive scan, non-power-of-two, shared memory");
+	//StreamCompaction::Naive::shared_scan(NPOT, c, a);
+	//printElapsedTime(StreamCompaction::Naive::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
+	//printArray(SIZE, c, true);
+	//printCmpResult(NPOT, b, c);
+
     zeroArray(SIZE, c);
     printDesc("work-efficient scan, power-of-two");
     StreamCompaction::Efficient::scan(SIZE, c, a);
@@ -101,25 +117,45 @@ int main(int argc, char* argv[]) {
     //printArray(NPOT, c, true);
     printCmpResult(NPOT, b, c);
 
+
+
+
+
 #ifdef RADIX
     zeroArray(SIZE, d);
-    
-    std::vector<int> aVec(SIZE);
+	genArray(SIZE, d, 50);
+	printArray(SIZE, d, true);
+    std::vector<int> dVec(SIZE);
     for(int i = 0; i < SIZE; i++) {
-        aVec[i] = a[i];
+        dVec[i] = d[i];
     }
-    std::sort(aVec.begin(), aVec.end());
+    std::sort(dVec.begin(), dVec.end());
     for(int i = 0; i < SIZE; i++) {
-        d[i] = aVec[i];
+        f[i] = dVec[i];
     }
-    printArray(SIZE, d, true);
 
-    zeroArray(SIZE, c);
+    zeroArray(SIZE, e);
     printDesc("radix sort, power-of-two");
-    StreamCompaction::Raidx::sort(SIZE, c, a);
-    printElapsedTime(StreamCompaction::Raidx::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
-    printArray(SIZE, c, true);
-    printCmpResult(SIZE, d, c);
+    StreamCompaction::Radix::sort(SIZE, e, d);
+    printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
+    printArray(SIZE, e, true);
+    printCmpResult(SIZE, f, e);
+
+	std::vector<int> dVecN(NPOT);
+	for (int i = 0; i < NPOT; i++) {
+		dVecN[i] = d[i];
+	}
+	std::sort(dVecN.begin(), dVecN.end());
+	for (int i = 0; i < NPOT; i++) {
+		f[i] = dVecN[i];
+	}
+
+	zeroArray(NPOT, e);
+	printDesc("radix sort, non-power-of-two");
+	StreamCompaction::Radix::sort(NPOT, e, d);
+	printElapsedTime(StreamCompaction::Radix::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
+	printArray(NPOT, e, true);
+	printCmpResult(NPOT, f, e);
 
 #endif
 
@@ -180,4 +216,6 @@ int main(int argc, char* argv[]) {
 	delete[] b;
 	delete[] c;
     delete[] d;
+	delete[] e;
+	delete[] f;
 }

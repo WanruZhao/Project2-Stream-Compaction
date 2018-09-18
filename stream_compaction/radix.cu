@@ -1,11 +1,10 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include "common.h"
 #include "radix.h"
 #include "efficient.h"
 
 namespace StreamCompaction {
-    namespace radix {
+    namespace Radix {
         using StreamCompaction::Common::PerformanceTimer;
         PerformanceTimer& timer()
         {
@@ -23,13 +22,14 @@ namespace StreamCompaction {
             bdata[index] = digit ? 1 : 0;
         }
 
-        __global__ void kernRadixDArray(int n, int p, int totalFalse, int *ddata, const int *fdata, const int *bdata) {
+        __global__ void kernRadixDArray(int n, int totalFalse, int *ddata, const int *fdata, int *bdata) {
             int index = blockDim.x * blockIdx.x + threadIdx.x;
             if(index >= n) return;
 
             int f = fdata[index];
             int t = index - f + totalFalse;
             ddata[index] = bdata[index] ? t : f;
+			bdata[index] = 1;
         }
 
         void sort(int n, int *odata, const int *idata){
@@ -38,7 +38,10 @@ namespace StreamCompaction {
             int nPow = 1 << d;
 
             int *dev_idataPow, *dev_bdataPow, *dev_edataPow, *dev_fdataPow, *dev_ddataPow, *dev_odataPow;
-            int en = 0, fn = 0;
+            int *en, *fn;
+
+			en = (int*)std::malloc(sizeof(int));
+			fn = (int*)std::malloc(sizeof(int));
 
             cudaMalloc((void**)&dev_idataPow, nPow * sizeof(int));
 			checkCUDAError("cudaMalloc dev_idataPow failed!");
@@ -56,7 +59,7 @@ namespace StreamCompaction {
             cudaMalloc((void**)&dev_fdataPow, nPow * sizeof(int));
             checkCUDAError("cudaMalloc dev_fdataPow failed!");
             cudaMemset(dev_fdataPow, 0, nPow * sizeof(int));
-            cudaMalloc((void**)&dev_ddata, nPow * sizeof(int));
+            cudaMalloc((void**)&dev_ddataPow, nPow * sizeof(int));
             checkCUDAError("cudaMalloc dev_idata failed!");
             cudaMemset(dev_ddataPow, 0, nPow * sizeof(int));
             cudaMalloc((void**)&dev_odataPow, nPow * sizeof(int));
@@ -67,13 +70,13 @@ namespace StreamCompaction {
             
             dim3 gridDim((n + blockSize - 1) / blockSize);
             
-            for(int p = 1; p <= 6; p++) {
-                kernRadixEArray<<<gridDim, blockSize>>>(n, p, dev_edataPow, dev_idataPow);
+            for(int p = 1; p <= (1 << 6); p = p << 1) {
+                kernRadixEArray<<<gridDim, blockSize>>>(n, p, dev_bdataPow, dev_edataPow, dev_idataPow);
                 cudaMemcpy(dev_fdataPow, dev_edataPow, nPow * sizeof(int), cudaMemcpyDeviceToDevice);
                 StreamCompaction::Efficient::scanCore(nPow, d, dev_fdataPow);
                 cudaMemcpy(en, dev_edataPow + n - 1, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemcpy(fn, dev_fdataPow + n - 1, sizeof(int), cudaMemcpyDeviceToHost);
-                kernRadixDArray<<<gridDim, blockSize>>>(n, p, en + fn, dev_ddataPow, dev_fdataPow, dev_bdataPow);
+                kernRadixDArray<<<gridDim, blockSize>>>(n, en[0] + fn[0], dev_ddataPow, dev_fdataPow, dev_bdataPow);
                 StreamCompaction::Common::kernScatter<<<gridDim, blockSize>>>(n, dev_odataPow, dev_idataPow, dev_bdataPow, dev_ddataPow);
                 std::swap(dev_idataPow, dev_odataPow);
             }
@@ -89,6 +92,9 @@ namespace StreamCompaction {
             cudaFree(dev_fdataPow);
             cudaFree(dev_ddataPow);
             cudaFree(dev_odataPow);
+
+			free(en);
+			free(fn);
 
         }
 
